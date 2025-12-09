@@ -173,7 +173,7 @@ This file contains all settings for your environment:
 
 ```json
 {
-    "host": "10.105.209.144",
+    "host": "1.1.1.1",
     "username": "cisco",
     "password": "cisco",
     "gnmi": {
@@ -198,7 +198,7 @@ This file contains all settings for your environment:
 #### General Settings
 | Parameter | Description | Example |
 |-----------|-------------|---------|
-| `host` | Target device IP address or hostname | `"10.105.209.144"` |
+| `host` | Target device IP address or hostname | `"1.1.1.14"` |
 | `username` | Device username | `"cisco"` |
 | `password` | Device password | `"cisco"` |
 
