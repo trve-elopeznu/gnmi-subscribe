@@ -16,3 +16,4 @@ gnmi_credentials.json
 output.txt
 *.log
 gnmi_subscribe_output.txt
+db_commit_report.md
