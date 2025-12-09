@@ -35,13 +35,41 @@ All Python dependencies are managed via UV and defined in `pyproject.toml`.
 
 ## 🚀 Quick Start
 
-### 1. Clone the Repository
+### Using Make (Recommended)
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/trve-elopeznu/gnmi-subscribe.git
+cd gnmi-subscribe
+
+# 2. Install and setup (installs UV, syncs dependencies, creates config)
+make install
+
+# 3. Edit configuration with your device details
+nano gnmi_credentials.json
+
+# 4. Verify setup
+make check
+
+# 5. Run parallel test
+make run-parallel
+
+# 6. View available commands
+make help
+```
+
+### Manual Setup
+
+<details>
+<summary>Click to expand manual setup steps</summary>
+
+#### 1. Clone the Repository
 ```bash
 git clone https://github.com/trve-elopeznu/gnmi-subscribe.git
 cd gnmi-subscribe
 ```
 
-### 2. Install UV (if not already installed)
+#### 2. Install UV (if not already installed)
 ```bash
 # macOS/Linux
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -50,13 +78,13 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 brew install uv
 ```
 
-### 3. Set Up the Project
+#### 3. Set Up the Project
 ```bash
 # Initialize UV virtual environment and install dependencies
-uv sync
+uv sync --frozen
 ```
 
-### 4. Configure Credentials
+#### 4. Configure Credentials
 ```bash
 # Copy the example configuration
 cp gnmi_credentials.example.json gnmi_credentials.json
@@ -65,13 +93,13 @@ cp gnmi_credentials.example.json gnmi_credentials.json
 nano gnmi_credentials.json  # or your preferred editor
 ```
 
-### 5. Verify Setup
+#### 5. Verify Setup
 ```bash
 # Run dependency checker
 uv run python check_dependencies.py
 ```
 
-### 6. Run Scripts
+#### 6. Run Scripts
 ```bash
 # Run both gNMI subscription and SSH commits in parallel
 uv run python run_parallel.py
@@ -80,6 +108,61 @@ uv run python run_parallel.py
 uv run python gnmi_subscribe.py
 uv run python ssh_commit_trigger.py
 uv run python filter_db_commit.py
+```
+
+</details>
+
+## 🎮 Make Commands
+
+The project includes a `Makefile` for easy operation. Run `make help` to see all available commands.
+
+### Setup Commands
+```bash
+make install       # Install UV and setup project (first time only)
+make sync          # Sync dependencies using uv
+make check         # Check dependencies and configuration
+```
+
+### Run Commands
+```bash
+make run-parallel  # Run gNMI subscribe and SSH commits in parallel
+make gnmi          # Run gNMI subscription only
+make ssh           # Run SSH commit trigger only
+make filter        # Filter DB_COMMIT entries from log
+```
+
+### Configuration Commands
+```bash
+make config        # Create config file from example
+make show-config   # Display current configuration
+```
+
+### Utility Commands
+```bash
+make clean         # Remove generated files and logs
+make test          # Run quick test (30s duration, 3 commits)
+make logs          # View recent log files
+```
+
+### Examples with Parameters
+```bash
+# Run parallel with custom duration and commits
+make run-parallel DURATION=120 COMMITS=5
+
+# Subscribe to different YANG path
+make gnmi PATH='Cisco-IOS-XR-infra-statsd-oper:/infra-statistics/interfaces'
+
+# SSH commits with different interface
+make ssh COMMITS=10 INTERFACE=Loopback20
+
+# Filter specific log file
+make filter INPUT=my_log.log REPORT=my_report.md
+```
+
+### Quick Test
+```bash
+# Run a quick 30-second test with 3 commits and generate report
+make test
 ```
 
 ## 📝 Configuration
