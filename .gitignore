@@ -1,0 +1,18 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Credentials (sensitive data)
+gnmi_credentials.json
+
+# Output files
+output.txt
+*.log
+gnmi_subscribe_output.txt
