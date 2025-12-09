@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "gNMIc Subscribe Script - runs gnmic subscribe command and saves output"
 readme = "README.md"
 requires-python = ">=3.9"
-dependencies = []
+dependencies = [
+    "paramiko>=4.0.0",
+]
 
 [project.scripts]
 gnmi-subscribe = "gnmi_subscribe:main"

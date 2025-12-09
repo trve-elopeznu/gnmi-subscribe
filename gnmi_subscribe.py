@@ -16,29 +16,29 @@ from datetime import datetime
 from typing import Optional, Tuple
 
 
-def load_credentials(credentials_file: str = "gnmi_credentials.json") -> Tuple[Optional[str], Optional[str]]:
+def load_credentials(credentials_file: str = "gnmi_credentials.json") -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """
-    Load username and password from a JSON credentials file.
+    Load host, username and password from a JSON credentials file.
     
     Args:
         credentials_file: Path to the JSON file containing credentials
         
     Returns:
-        Tuple of (username, password) or (None, None) if file not found
+        Tuple of (host, username, password) or (None, None, None) if file not found
     """
     try:
         with open(credentials_file, "r") as f:
             creds = json.load(f)
-            return creds.get("username"), creds.get("password")
+            return creds.get("host"), creds.get("username"), creds.get("password")
     except FileNotFoundError:
-        return None, None
+        return None, None, None
     except json.JSONDecodeError as e:
         print(f"Warning: Invalid JSON in credentials file: {e}")
-        return None, None
+        return None, None, None
 
 
 def run_gnmic_subscribe(
-    target: str = "10.213.97.241:57344",
+    target: Optional[str] = None,
     timeout: str = "60s",
     encoding: str = "json_ietf",
     path: str = "/",
@@ -50,13 +50,14 @@ def run_gnmic_subscribe(
     credentials_file: Optional[str] = None,
     sample_interval: str = "10s",
     mode: str = "stream",
-    stream_mode: str = "sample"
+    stream_mode: str = "sample",
+    port: int = 57344
 ) -> None:
     """
     Run gnmic subscribe command and save output to a file.
     
     Args:
-        target: Target address in format ip:port
+        target: Target address in format ip:port (optional, can be loaded from credentials)
         timeout: Connection timeout (e.g., "60s")
         encoding: Data encoding format (e.g., "json_ietf", "json", "proto")
         path: gNMI path to subscribe to
@@ -69,15 +70,24 @@ def run_gnmic_subscribe(
         sample_interval: Sample interval for stream mode (e.g., "10s")
         mode: Subscription mode (stream, once, poll)
         stream_mode: Stream subscription mode (sample, on_change, target_defined)
+        port: gNMI port (default: 57344, used when host is loaded from credentials)
     """
     
-    # Load credentials from file if specified and no username/password provided
-    if credentials_file and not (username and password):
-        file_user, file_pass = load_credentials(credentials_file)
+    # Load credentials from file if specified
+    if credentials_file:
+        file_host, file_user, file_pass = load_credentials(credentials_file)
+        # Use host from credentials if target not explicitly provided
+        if file_host and not target:
+            target = f"{file_host}:{port}"
         if file_user and not username:
             username = file_user
         if file_pass and not password:
             password = file_pass
+    
+    # Ensure target is set
+    if not target:
+        print("Error: Target address is required (set in credentials file or via --address)")
+        sys.exit(1)
     
     # Build the gnmic command
     cmd = [
@@ -232,8 +242,14 @@ def main():
     )
     parser.add_argument(
         "-a", "--address",
-        default="10.213.97.241:57344",
-        help="Target address (ip:port)"
+        default=None,
+        help="Target address (ip:port) - defaults to host from credentials file"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=57344,
+        help="gNMI port when using host from credentials (default: 57344)"
     )
     parser.add_argument(
         "-t", "--timeout",
@@ -313,7 +329,8 @@ def main():
         credentials_file=args.credentials_file,
         sample_interval=args.sample_interval,
         mode=args.mode,
-        stream_mode=args.stream_mode
+        stream_mode=args.stream_mode,
+        port=args.port
     )
 
 
