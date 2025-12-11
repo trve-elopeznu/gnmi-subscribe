@@ -9,9 +9,42 @@ Outputs a markdown table showing commit IDs and their occurrence count.
 import re
 import argparse
 import json
+import os
 from datetime import datetime
 from collections import Counter, OrderedDict
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
+
+
+def extract_subscription_metadata(log_file: str) -> Optional[Dict[str, str]]:
+    """
+    Extract subscription metadata from the log file header and footer.
+    
+    Args:
+        log_file: Path to the syslog output log file
+        
+    Returns:
+        Dictionary with start_time, end_time, duration, target, yang_path, or None if not found
+    """
+    metadata = {}
+    
+    try:
+        with open(log_file, 'r') as f:
+            for line in f:
+                if line.startswith('# Start Time:'):
+                    metadata['start_time'] = line.split(':', 1)[1].strip()
+                elif line.startswith('# End Time:'):
+                    metadata['end_time'] = line.split(':', 1)[1].strip()
+                elif line.startswith('# Total Duration:'):
+                    metadata['duration'] = line.split(':', 1)[1].strip()
+                elif line.startswith('# Target:'):
+                    metadata['target'] = line.split(':', 1)[1].strip()
+                elif line.startswith('# YANG Path:'):
+                    metadata['yang_path'] = line.split(':', 1)[1].strip()
+    except Exception as e:
+        print(f"Warning: Could not extract metadata: {e}")
+        return None
+    
+    return metadata if metadata else None
 
 
 def extract_commit_ids(log_file: str) -> List[Tuple[str, str, str]]:
@@ -103,7 +136,7 @@ def analyze_commits(commits: List[Tuple[str, str, str]]) -> Dict:
     }
 
 
-def generate_markdown_report(analysis: Dict, output_file: str, log_file: str) -> str:
+def generate_markdown_report(analysis: Dict, output_file: str, log_file: str, metadata: Optional[Dict[str, str]] = None) -> str:
     """
     Generate a markdown report of the commit analysis.
     
@@ -111,6 +144,7 @@ def generate_markdown_report(analysis: Dict, output_file: str, log_file: str) ->
         analysis: Analysis results dictionary
         output_file: Path to write the markdown report
         log_file: Source log file name for the report
+        metadata: Optional subscription metadata (start_time, end_time, duration, etc.)
         
     Returns:
         The generated markdown content
@@ -122,7 +156,29 @@ def generate_markdown_report(analysis: Dict, output_file: str, log_file: str) ->
 **Generated:** {report_time}  
 **Source File:** `{log_file}`
 
-## Summary
+"""
+
+    # Add subscription metadata if available
+    if metadata:
+        md_content += """## Subscription Details
+
+| Metric | Value |
+|--------|-------|
+"""
+        if 'target' in metadata:
+            md_content += f"| Target Device | {metadata['target']} |\n"
+        if 'yang_path' in metadata:
+            md_content += f"| YANG Path | {metadata['yang_path']} |\n"
+        if 'start_time' in metadata:
+            md_content += f"| Start Time | {metadata['start_time']} |\n"
+        if 'end_time' in metadata:
+            md_content += f"| End Time | {metadata['end_time']} |\n"
+        if 'duration' in metadata:
+            md_content += f"| Total Duration | {metadata['duration']} |\n"
+        
+        md_content += "\n"
+    
+    md_content += f"""## Summary
 
 | Metric | Value |
 |--------|-------|
@@ -192,13 +248,13 @@ def main():
     )
     parser.add_argument(
         "-i", "--input",
-        default="syslog_output.log",
-        help="Input log file (default: syslog_output.log)"
+        default=None,
+        help="Input log file (default: auto-detect latest in results/)"
     )
     parser.add_argument(
         "-o", "--output",
-        default="db_commit_report.md",
-        help="Output markdown report file (default: db_commit_report.md)"
+        default=None,
+        help="Output markdown report file (default: same name as input with .md extension in results/)"
     )
     parser.add_argument(
         "--json",
@@ -213,8 +269,43 @@ def main():
     
     args = parser.parse_args()
     
+    # Auto-detect input file if not provided
+    if args.input is None:
+        results_dir = "results"
+        if os.path.exists(results_dir):
+            # Find the most recent .log file in results/
+            log_files = [f for f in os.listdir(results_dir) if f.endswith('.log')]
+            if log_files:
+                # Sort by modification time, newest first
+                log_files.sort(key=lambda x: os.path.getmtime(os.path.join(results_dir, x)), reverse=True)
+                args.input = os.path.join(results_dir, log_files[0])
+                print(f"Auto-detected input file: {args.input}")
+            else:
+                print("Error: No .log files found in results/ directory")
+                return
+        else:
+            print("Error: results/ directory not found. Run gnmi_subscribe first.")
+            return
+    
+    # Generate output filename if not provided
+    if args.output is None:
+        # Extract base name from input file and replace .log with _report.md
+        input_basename = os.path.basename(args.input)
+        if input_basename.endswith('.log'):
+            output_basename = input_basename.replace('.log', '_report.md')
+        else:
+            output_basename = input_basename + '_report.md'
+        
+        # Put output in results/ directory
+        results_dir = "results"
+        os.makedirs(results_dir, exist_ok=True)
+        args.output = os.path.join(results_dir, output_basename)
+    
     print(f"DB_COMMIT Filter - Analyzing {args.input}")
     print("=" * 50)
+    
+    # Extract subscription metadata
+    metadata = extract_subscription_metadata(args.input)
     
     # Extract commits
     commits = extract_commit_ids(args.input)
@@ -238,7 +329,7 @@ def main():
     
     # Generate report
     print(f"\nGenerating report: {args.output}")
-    generate_markdown_report(analysis, args.output, args.input)
+    generate_markdown_report(analysis, args.output, args.input, metadata)
     
     # Optional JSON output
     if args.json:

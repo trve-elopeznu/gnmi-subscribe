@@ -73,27 +73,39 @@ show-config:
 # Run parallel (with optional parameters)
 DURATION ?= 600
 COMMITS ?= 5
-OUTPUT ?= syslog_output.log
+STREAM_MODE ?= sample
 
 run-parallel:
 	@echo "Running gNMI subscribe and SSH commits in parallel..."
 	@echo "  Duration: $(DURATION)s"
 	@echo "  Commits: $(COMMITS)"
-	@echo "  Output: $(OUTPUT)"
-	@uv run python run_parallel.py -d $(DURATION) -n $(COMMITS) -o $(OUTPUT)
+	@echo "  Stream Mode: $(STREAM_MODE)"
+	@if [ -n "$(OUTPUT)" ]; then \
+		uv run python run_parallel.py -d $(DURATION) -n $(COMMITS) -o $(OUTPUT) -s $(STREAM_MODE); \
+	else \
+		uv run python run_parallel.py -d $(DURATION) -n $(COMMITS) -s $(STREAM_MODE); \
+	fi
 
 # gNMI subscribe only
-YANG_PATH ?= Cisco-IOS-XR-infra-syslog-oper:/syslog/messages/message/text
+YANG_PATH ?= 
 TIMEOUT ?= 60s
 STREAM_MODE ?= sample
 
 gnmi:
 	@echo "Running gNMI subscription..."
-	@echo "  YANG Path: $(YANG_PATH)"
-	@echo "  Duration: $(DURATION)s"
-	@echo "  Output: $(OUTPUT)"
-	@echo "  Stream Mode: $(STREAM_MODE)"
-	@uv run python gnmi_subscribe.py --path "$(YANG_PATH)" -d $(DURATION) -o $(OUTPUT) -t $(TIMEOUT) -s $(STREAM_MODE)
+	@if [ -n "$(YANG_PATH)" ] && [ -n "$(OUTPUT)" ]; then \
+		echo "  YANG Path: $(YANG_PATH)"; \
+		uv run python gnmi_subscribe.py --path "$(YANG_PATH)" -d $(DURATION) -o $(OUTPUT) -t $(TIMEOUT) -s $(STREAM_MODE); \
+	elif [ -n "$(YANG_PATH)" ]; then \
+		echo "  YANG Path: $(YANG_PATH)"; \
+		uv run python gnmi_subscribe.py --path "$(YANG_PATH)" -d $(DURATION) -t $(TIMEOUT) -s $(STREAM_MODE); \
+	elif [ -n "$(OUTPUT)" ]; then \
+		echo "  YANG Path: (from gnmi_credentials.json)"; \
+		uv run python gnmi_subscribe.py -d $(DURATION) -o $(OUTPUT) -t $(TIMEOUT) -s $(STREAM_MODE); \
+	else \
+		echo "  YANG Path: (from gnmi_credentials.json)"; \
+		uv run python gnmi_subscribe.py -d $(DURATION) -t $(TIMEOUT) -s $(STREAM_MODE); \
+	fi
 
 # SSH commits only
 INTERFACE ?= Loopback10
@@ -107,14 +119,19 @@ ssh:
 	@uv run python ssh_commit_trigger.py -n $(COMMITS) -i $(INTERFACE) -w $(WAIT)
 
 # Filter DB_COMMIT
-INPUT ?= syslog_output.log
-REPORT ?= db_commit_report.md
-
 filter:
 	@echo "Filtering DB_COMMIT entries..."
-	@echo "  Input: $(INPUT)"
-	@echo "  Report: $(REPORT)"
-	@uv run python filter_db_commit.py -i $(INPUT) -o $(REPORT) -v
+	@if [ -n "$(INPUT)" ] && [ -n "$(REPORT)" ]; then \
+		echo "  Input: $(INPUT)"; \
+		echo "  Report: $(REPORT)"; \
+		uv run python filter_db_commit.py -i $(INPUT) -o $(REPORT) -v; \
+	elif [ -n "$(INPUT)" ]; then \
+		echo "  Input: $(INPUT)"; \
+		uv run python filter_db_commit.py -i $(INPUT) -v; \
+	else \
+		echo "  Auto-detecting latest log file..."; \
+		uv run python filter_db_commit.py -v; \
+	fi
 
 # Quick test run
 test:

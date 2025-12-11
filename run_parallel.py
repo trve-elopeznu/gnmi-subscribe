@@ -38,7 +38,7 @@ def load_config(credentials_file: str = "gnmi_credentials.json") -> Dict[str, An
             "path": "Cisco-IOS-XR-infra-syslog-oper:/syslog/messages/message/text",
             "duration": 600,
             "timeout": "60s",
-            "output_file": "syslog_output.log"
+            "output_file": None
         },
         "ssh": {
             "port": 22,
@@ -77,9 +77,10 @@ def load_config(credentials_file: str = "gnmi_credentials.json") -> Dict[str, An
 def run_parallel(
     # gNMI subscribe options
     gnmi_path: str = "Cisco-IOS-XR-infra-syslog-oper:/syslog/messages/message/text",
-    gnmi_output: str = "syslog_output.log",
+    gnmi_output: str = None,
     gnmi_timeout: str = "60s",
     gnmi_duration: int = 600,
+    gnmi_stream_mode: str = "sample",
     # SSH commit options
     ssh_num_commits: int = 5,
     ssh_wait: float = 0.5,
@@ -97,6 +98,7 @@ def run_parallel(
         gnmi_output: Output file for gNMI subscription
         gnmi_timeout: Connection timeout for gNMI
         gnmi_duration: Duration in seconds for gNMI subscription
+        gnmi_stream_mode: Stream mode (sample, on_change, target_defined)
         ssh_num_commits: Number of SSH commits to perform
         ssh_wait: Wait time between commits
         ssh_interface: Loopback interface to configure
@@ -138,9 +140,10 @@ def run_parallel(
     print()
     print("gNMI Subscribe Settings:")
     print(f"  Path: {gnmi_path}")
-    print(f"  Output: {gnmi_output}")
+    print(f"  Output: {gnmi_output if gnmi_output else 'auto-generated in results/'}")
     print(f"  Duration: {gnmi_duration}s ({gnmi_duration // 60} minutes)")
     print(f"  Timeout: {gnmi_timeout}")
+    print(f"  Stream Mode: {gnmi_stream_mode}")
     print()
     print("SSH Commit Settings:")
     print(f"  Number of commits: {ssh_num_commits}")
@@ -154,11 +157,15 @@ def run_parallel(
         gnmi_cmd = [
             sys.executable, "gnmi_subscribe.py",
             "--path", gnmi_path,
-            "-o", gnmi_output,
             "-t", gnmi_timeout,
             "--duration", str(gnmi_duration),
+            "-s", gnmi_stream_mode,
             "-c", credentials_file
         ]
+        
+        # Only add output file if specified
+        if gnmi_output:
+            gnmi_cmd.extend(["-o", gnmi_output])
         
         # Start gNMI subscription
         print(f"\n[{datetime.now().isoformat()}] Starting gNMI subscription...")
@@ -302,8 +309,8 @@ def main():
     )
     gnmi_group.add_argument(
         "-o", "--output",
-        default=gnmi_config.get("output_file"),
-        help=f"Output file for gNMI subscription (config: {gnmi_config.get('output_file')})"
+        default=None,
+        help="Output file for gNMI subscription (default: auto-generated timestamp in results/)"
     )
     gnmi_group.add_argument(
         "-t", "--timeout",
@@ -315,6 +322,12 @@ def main():
         type=int,
         default=gnmi_config.get("duration"),
         help=f"gNMI subscription duration in seconds (config: {gnmi_config.get('duration')})"
+    )
+    gnmi_group.add_argument(
+        "-s", "--stream-mode",
+        default="sample",
+        choices=["sample", "on_change", "target_defined"],
+        help="Stream mode for gNMI subscription (default: sample)"
     )
     
     # SSH options
@@ -373,6 +386,7 @@ def main():
         gnmi_output=args.output,
         gnmi_timeout=args.timeout,
         gnmi_duration=args.duration,
+        gnmi_stream_mode=args.stream_mode,
         ssh_num_commits=args.num_commits,
         ssh_wait=args.wait,
         ssh_interface=args.interface,

@@ -16,25 +16,26 @@ from datetime import datetime
 from typing import Optional, Tuple
 
 
-def load_credentials(credentials_file: str = "gnmi_credentials.json") -> Tuple[Optional[str], Optional[str], Optional[str]]:
+def load_credentials(credentials_file: str = "gnmi_credentials.json") -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
     """
-    Load host, username and password from a JSON credentials file.
+    Load host, username, password, and YANG path from a JSON credentials file.
     
     Args:
         credentials_file: Path to the JSON file containing credentials
         
     Returns:
-        Tuple of (host, username, password) or (None, None, None) if file not found
+        Tuple of (host, username, password, yang_path) or (None, None, None, None) if file not found
     """
     try:
         with open(credentials_file, "r") as f:
             creds = json.load(f)
-            return creds.get("host"), creds.get("username"), creds.get("password")
+            yang_path = creds.get("gnmi", {}).get("path") if "gnmi" in creds else None
+            return creds.get("host"), creds.get("username"), creds.get("password"), yang_path
     except FileNotFoundError:
-        return None, None, None
+        return None, None, None, None
     except json.JSONDecodeError as e:
         print(f"Warning: Invalid JSON in credentials file: {e}")
-        return None, None, None
+        return None, None, None, None
 
 
 def run_gnmic_subscribe(
@@ -42,7 +43,7 @@ def run_gnmic_subscribe(
     timeout: str = "60s",
     encoding: str = "json_ietf",
     yang_path: str = "/",
-    output_file: str = "gnmi_subscribe_output.log",
+    output_file: str = None,
     duration_seconds: int = 600,  # 10 minutes
     skip_verify: bool = True,
     username: Optional[str] = None,
@@ -75,7 +76,7 @@ def run_gnmic_subscribe(
     
     # Load credentials from file if specified
     if credentials_file:
-        file_host, file_user, file_pass = load_credentials(credentials_file)
+        file_host, file_user, file_pass, file_yang_path = load_credentials(credentials_file)
         # Use host from credentials if target not explicitly provided
         if file_host and not target:
             target = f"{file_host}:{port}"
@@ -83,6 +84,21 @@ def run_gnmic_subscribe(
             username = file_user
         if file_pass and not password:
             password = file_pass
+        # Use YANG path from credentials if not explicitly provided
+        if file_yang_path and yang_path == "/":
+            yang_path = file_yang_path
+    
+    # Create results directory if it doesn't exist
+    results_dir = "results"
+    os.makedirs(results_dir, exist_ok=True)
+    
+    # Generate timestamp-based filename if not provided
+    if output_file is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_file = os.path.join(results_dir, f"gnmi_subscribe_{timestamp}.log")
+    # If output_file is provided but doesn't include a path, put it in results/
+    elif not os.path.dirname(output_file):
+        output_file = os.path.join(results_dir, output_file)
     
     # Ensure target is set
     if not target:
@@ -276,8 +292,8 @@ def main():
     )
     parser.add_argument(
         "-o", "--output",
-        default="gnmi_subscribe_output.log",
-        help="Output file path (default: gnmi_subscribe_output.log)"
+        default=None,
+        help="Output file path (default: results/gnmi_subscribe_YYYYMMDD_HHMMSS.log)"
     )
     parser.add_argument(
         "-d", "--duration",

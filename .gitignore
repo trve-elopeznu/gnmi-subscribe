@@ -18,3 +18,4 @@ output.txt
 gnmi_subscribe_output.txt
 db_commit_report.md
 .results
+results/
