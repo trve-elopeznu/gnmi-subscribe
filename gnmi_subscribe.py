@@ -41,8 +41,8 @@ def run_gnmic_subscribe(
     target: Optional[str] = None,
     timeout: str = "60s",
     encoding: str = "json_ietf",
-    path: str = "/",
-    output_file: str = "gnmi_subscribe_output.txt",
+    yang_path: str = "/",
+    output_file: str = "gnmi_subscribe_output.log",
     duration_seconds: int = 600,  # 10 minutes
     skip_verify: bool = True,
     username: Optional[str] = None,
@@ -60,7 +60,7 @@ def run_gnmic_subscribe(
         target: Target address in format ip:port (optional, can be loaded from credentials)
         timeout: Connection timeout (e.g., "60s")
         encoding: Data encoding format (e.g., "json_ietf", "json", "proto")
-        path: gNMI path to subscribe to
+        yang_path: gNMI YANG path to subscribe to
         output_file: Output file path for the subscription data
         duration_seconds: How long to run the subscription (default 600s = 10 min)
         skip_verify: Skip TLS certificate verification
@@ -96,11 +96,14 @@ def run_gnmic_subscribe(
         f"--timeout={timeout}",
         "subscribe",
         "--encoding", encoding,
-        "--path", path,
+        "--path", yang_path,
         "--mode", mode,
         "--stream-mode", stream_mode,
-        "--sample-interval", sample_interval,
     ]
+    
+    # Only add sample-interval for 'sample' stream mode
+    if stream_mode == "sample":
+        cmd.extend(["--sample-interval", sample_interval])
     
     if skip_verify:
         cmd.append("--skip-verify")
@@ -113,7 +116,7 @@ def run_gnmic_subscribe(
     
     print(f"Starting gnmic subscribe...")
     print(f"Target: {target}")
-    print(f"Path: {path}")
+    print(f"YANG Path: {yang_path}")
     print(f"Encoding: {encoding}")
     print(f"Duration: {duration_seconds} seconds ({duration_seconds // 60} minutes)")
     print(f"Output file: {output_file}")
@@ -130,7 +133,7 @@ def run_gnmic_subscribe(
             f.write(f"# gNMIc Subscribe Output\n")
             f.write(f"# Start Time: {start_time.isoformat()}\n")
             f.write(f"# Target: {target}\n")
-            f.write(f"# Path: {path}\n")
+            f.write(f"# YANG Path: {yang_path}\n")
             f.write(f"# Encoding: {encoding}\n")
             f.write(f"# Duration: {duration_seconds} seconds\n")
             f.write(f"# Command: {' '.join(cmd)}\n")
@@ -192,6 +195,8 @@ def run_gnmic_subscribe(
             
         print("-" * 60)
         print(f"Subscription completed!")
+        print(f"Target: {target}")
+        print(f"YANG Path: {yang_path}")
         print(f"End Time: {end_time.isoformat()}")
         print(f"Total Duration: {duration:.2f} seconds")
         print(f"Total Messages: {line_count}")
@@ -199,6 +204,8 @@ def run_gnmic_subscribe(
         
     except KeyboardInterrupt:
         print("\n\nSubscription interrupted by user (Ctrl+C)")
+        print(f"Target: {target}")
+        print(f"YANG Path: {yang_path}")
         if process:
             process.terminate()
             process.wait()
@@ -269,8 +276,8 @@ def main():
     )
     parser.add_argument(
         "-o", "--output",
-        default="gnmi_subscribe_output.txt",
-        help="Output file path (default: gnmi_subscribe_output.txt)"
+        default="gnmi_subscribe_output.log",
+        help="Output file path (default: gnmi_subscribe_output.log)"
     )
     parser.add_argument(
         "-d", "--duration",
@@ -320,7 +327,7 @@ def main():
         target=args.address,
         timeout=args.timeout,
         encoding=args.encoding,
-        path=args.path,
+        yang_path=args.path,
         output_file=args.output,
         duration_seconds=args.duration,
         skip_verify=not args.no_skip_verify,

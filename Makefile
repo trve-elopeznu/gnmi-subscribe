@@ -28,7 +28,8 @@ help:
 	@echo ""
 	@echo "Examples:"
 	@echo "  make run-parallel DURATION=120 COMMITS=5"
-	@echo "  make gnmi PATH='Cisco-IOS-XR-infra-statsd-oper:/infra-statistics/interfaces'"
+	@echo "  make gnmi YANG_PATH='Cisco-IOS-XR-infra-statsd-oper:/infra-statistics/interfaces'"
+	@echo "  make gnmi STREAM_MODE=on_change DURATION=300"
 	@echo "  make ssh COMMITS=10 INTERFACE=Loopback20"
 	@echo ""
 
@@ -82,15 +83,17 @@ run-parallel:
 	@uv run python run_parallel.py -d $(DURATION) -n $(COMMITS) -o $(OUTPUT)
 
 # gNMI subscribe only
-PATH ?= Cisco-IOS-XR-infra-syslog-oper:/syslog/messages/message/text
+YANG_PATH ?= Cisco-IOS-XR-infra-syslog-oper:/syslog/messages/message/text
 TIMEOUT ?= 60s
+STREAM_MODE ?= sample
 
 gnmi:
 	@echo "Running gNMI subscription..."
-	@echo "  Path: $(PATH)"
+	@echo "  YANG Path: $(YANG_PATH)"
 	@echo "  Duration: $(DURATION)s"
 	@echo "  Output: $(OUTPUT)"
-	@uv run python gnmi_subscribe.py --path "$(PATH)" -d $(DURATION) -o $(OUTPUT) -t $(TIMEOUT)
+	@echo "  Stream Mode: $(STREAM_MODE)"
+	@uv run python gnmi_subscribe.py --path "$(YANG_PATH)" -d $(DURATION) -o $(OUTPUT) -t $(TIMEOUT) -s $(STREAM_MODE)
 
 # SSH commits only
 INTERFACE ?= Loopback10
