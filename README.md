@@ -14,12 +14,15 @@ Perfect for testing gNMI subscriptions, analyzing configuration commit behavior,
 
 ## ✨ Features
 
-- **gNMI Subscription**: Subscribe to any YANG model path and capture telemetry data
+- **gNMI Subscription**: Subscribe to any YANG model path with configurable stream modes (sample, on_change, target_defined)
 - **SSH Commit Trigger**: Automatically perform multiple configuration commits
 - **Parallel Execution**: Run both operations simultaneously to capture events
-- **DB_COMMIT Analysis**: Extract and analyze commit IDs with duplicate detection
+- **DB_COMMIT Analysis**: Extract and analyze commit IDs with duplicate detection and subscription metadata
+- **Timestamp-Based Results**: Auto-generated filenames with timestamps prevent overwriting
+- **Results Organization**: All outputs stored in `results/` directory with correlated log and report files
 - **Configurable**: All settings in a single JSON configuration file
 - **Dependency Checker**: Validate environment before running
+- **Auto-Detection**: Filter script automatically finds latest log file
 
 ## 📋 Requirements
 
@@ -51,10 +54,13 @@ nano gnmi_credentials.json
 # 4. Verify setup
 make check
 
-# 5. Run parallel test
-make run-parallel
+# 5. Run parallel test (with on_change stream mode)
+make run-parallel DURATION=60 STREAM_MODE=on_change
 
-# 6. View available commands
+# 6. Filter and analyze results (auto-detects latest log)
+make filter
+
+# 7. View available commands
 make help
 ```
 
@@ -125,11 +131,21 @@ make check         # Check dependencies and configuration
 
 ### Run Commands
 ```bash
-make run-parallel  # Run gNMI subscribe and SSH commits in parallel
+make run-parallel  # Run gNMI subscribe and SSH commits in parallel (auto-generates timestamp files)
 make gnmi          # Run gNMI subscription only
 make ssh           # Run SSH commit trigger only
-make filter        # Filter DB_COMMIT entries from log
+make filter        # Filter DB_COMMIT entries (auto-detects latest log)
 ```
+
+### Makefile Parameters
+
+**Common Parameters:**
+- `DURATION=<seconds>` - Subscription duration (default: 600)
+- `COMMITS=<number>` - Number of SSH commits (default: 5)
+- `STREAM_MODE=<mode>` - Stream mode: sample, on_change, target_defined (default: sample)
+- `YANG_PATH=<path>` - YANG model path to subscribe
+- `INPUT=<file>` - Input log file for filtering (auto-detects if not specified)
+- `OUTPUT=<file>` - Output file name (auto-generated if not specified)
 
 ### Configuration Commands
 ```bash
@@ -141,22 +157,24 @@ make show-config   # Display current configuration
 ```bash
 make clean         # Remove generated files and logs
 make test          # Run quick test (30s duration, 3 commits)
-make logs          # View recent log files
 ```
 
 ### Examples with Parameters
 ```bash
-# Run parallel with custom duration and commits
-make run-parallel DURATION=120 COMMITS=5
+# Run parallel with on_change stream mode
+make run-parallel DURATION=60 STREAM_MODE=on_change COMMITS=5
 
-# Subscribe to different YANG path
-make gnmi PATH='Cisco-IOS-XR-infra-statsd-oper:/infra-statistics/interfaces'
+# Subscribe to different YANG path with sample mode
+make gnmi YANG_PATH='Cisco-IOS-XR-infra-statsd-oper:/infra-statistics/interfaces' STREAM_MODE=sample
 
 # SSH commits with different interface
 make ssh COMMITS=10 INTERFACE=Loopback20
 
 # Filter specific log file
-make filter INPUT=my_log.log REPORT=my_report.md
+make filter INPUT=results/gnmi_subscribe_20251211_150132.log
+
+# Or let it auto-detect the latest
+make filter
 ```
 
 ### Quick Test
@@ -178,10 +196,9 @@ This file contains all settings for your environment:
     "password": "cisco",
     "gnmi": {
         "port": 57344,
-        "path": "Cisco-IOS-XR-infra-syslog-oper:/syslog/messages/message/text",
+        "path": "Cisco-IOS-XR-infra-syslog-oper:/syslog/messages/message",
         "duration": 120,
-        "timeout": "60s",
-        "output_file": "syslog_output.log"
+        "timeout": "60s"
     },
     "ssh": {
         "port": 22,
@@ -192,6 +209,8 @@ This file contains all settings for your environment:
     }
 }
 ```
+
+**Note**: Output files are now automatically generated with timestamps in the `results/` directory (e.g., `results/gnmi_subscribe_20251211_150132.log`).
 
 ### Configuration Parameters
 
@@ -206,10 +225,11 @@ This file contains all settings for your environment:
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `port` | gNMI port | `57344` |
-| `path` | YANG model path to subscribe | `"Cisco-IOS-XR-infra-syslog-oper:/syslog/messages/message/text"` |
+| `path` | YANG model path to subscribe | `"Cisco-IOS-XR-infra-syslog-oper:/syslog/messages/message"` |
 | `duration` | Subscription duration (seconds) | `120` |
 | `timeout` | Connection timeout | `"60s"` |
-| `output_file` | Output log file name | `"syslog_output.log"` |
+
+**Note**: Output files are now auto-generated with timestamps in the `results/` directory.
 
 #### SSH Settings (`ssh` section)
 | Parameter | Description | Default |
@@ -247,14 +267,17 @@ Run gNMI subscription and SSH commits simultaneously.
 # Use config file defaults
 uv run python run_parallel.py
 
+# With on_change stream mode
+uv run python run_parallel.py -d 60 -s on_change
+
 # Show current configuration
 uv run python run_parallel.py --show-config
 
 # Override specific options
-uv run python run_parallel.py -d 300 -n 10
+uv run python run_parallel.py -d 300 -n 10 -s sample
 
-# Custom output file
-uv run python run_parallel.py -o my_output.log
+# Custom output file (otherwise auto-generated with timestamp)
+uv run python run_parallel.py -o results/custom_output.log
 
 # Quiet mode
 uv run python run_parallel.py -q
@@ -263,7 +286,8 @@ uv run python run_parallel.py -q
 **Options:**
 - `-d, --duration`: Subscription duration in seconds
 - `-n, --num-commits`: Number of SSH commits
-- `-o, --output`: Output file name
+- `-o, --output`: Output file name (auto-generated if not specified)
+- `-s, --stream-mode`: Stream mode (sample, on_change, target_defined)
 - `--gnmi-path`: Override YANG path
 - `-q, --quiet`: Suppress verbose output
 - `--show-config`: Display current configuration
@@ -272,13 +296,16 @@ uv run python run_parallel.py -q
 Subscribe to gNMI telemetry and save output.
 
 ```bash
-# Use config file settings
+# Use config file settings (auto-generates filename with timestamp)
 uv run python gnmi_subscribe.py
+
+# With on_change stream mode
+uv run python gnmi_subscribe.py -d 60 -s on_change
 
 # Custom path and duration
 uv run python gnmi_subscribe.py \
     --path "Cisco-IOS-XR-infra-statsd-oper:/infra-statistics/interfaces" \
-    -d 300 -o stats.log
+    -d 300 -s sample
 
 # Specify target explicitly
 uv run python gnmi_subscribe.py -a 10.1.1.1:57344
@@ -289,8 +316,14 @@ uv run python gnmi_subscribe.py -a 10.1.1.1:57344
 - `--port`: gNMI port (when using host from config)
 - `-p, --path`: YANG model path
 - `-d, --duration`: Subscription duration (seconds)
-- `-o, --output`: Output file
+- `-o, --output`: Output file (auto-generated if not specified)
+- `-s, --stream-mode`: Stream mode (sample, on_change, target_defined)
 - `-t, --timeout`: Connection timeout
+
+**Stream Modes:**
+- `sample`: Periodic updates at specified interval (default)
+- `on_change`: Updates only when values change
+- `target_defined`: Target device determines update cadence
 
 ### 3. `ssh_commit_trigger.py` - SSH Commit Trigger
 Trigger multiple configuration commits via SSH.
@@ -320,24 +353,31 @@ uv run python ssh_commit_trigger.py -n 5 -q
 Extract and analyze DB_COMMIT entries from log files.
 
 ```bash
-# Analyze default log file
+# Auto-detect latest log file in results/
 uv run python filter_db_commit.py
 
 # Verbose output
 uv run python filter_db_commit.py -v
 
 # Custom input/output
-uv run python filter_db_commit.py -i my_log.log -o report.md
+uv run python filter_db_commit.py -i results/gnmi_subscribe_20251211_150132.log -o results/custom_report.md
 
 # Also export as JSON
 uv run python filter_db_commit.py --json
 ```
 
 **Options:**
-- `-i, --input`: Input log file
-- `-o, --output`: Output markdown report
+- `-i, --input`: Input log file (auto-detects latest in results/ if not specified)
+- `-o, --output`: Output markdown report (auto-generates based on input filename)
 - `--json`: Also output as JSON
 - `-v, --verbose`: Print detailed output
+
+**Features:**
+- Auto-detects latest log file in `results/` directory
+- Generates correlated report filename (e.g., `gnmi_subscribe_20251211_150132_report.md`)
+- Extracts subscription metadata (start time, end time, duration, target, YANG path)
+- Identifies duplicate commit IDs
+- Creates markdown tables with commit analysis
 
 ### 5. `check_dependencies.py` - Dependency Checker
 Validate environment and dependencies.
@@ -361,28 +401,42 @@ Checks:
 
 ```bash
 # 1. Verify environment
-uv run python check_dependencies.py
+make check
 
 # 2. Configure for your device
 nano gnmi_credentials.json
 
-# 3. Run parallel test (2 minutes, 5 commits)
-uv run python run_parallel.py -d 120 -n 5
+# 3. Run parallel test with on_change mode (60 seconds, 5 commits)
+make run-parallel DURATION=60 STREAM_MODE=on_change COMMITS=5
 
-# 4. Analyze results
-uv run python filter_db_commit.py -v
+# 4. Analyze results (auto-detects latest log)
+make filter
 
-# 5. View the report
-cat db_commit_report.md
+# 5. View the generated report
+ls -lt results/
+cat results/gnmi_subscribe_*_report.md
 ```
 
 ### Output Files
 
-After running the scripts, you'll have:
+After running the scripts, you'll have timestamped files in `results/`:
 
-- **`syslog_output.log`**: Raw gNMI subscription data with timestamps
-- **`db_commit_report.md`**: Markdown report with commit analysis
-- **`db_commit_report.json`**: JSON data (if `--json` flag used)
+- **`results/gnmi_subscribe_20251211_150132.log`**: Raw gNMI subscription data with timestamps, metadata
+- **`results/gnmi_subscribe_20251211_150132_report.md`**: Markdown report with:
+  - Subscription details (target, YANG path, start/end time, duration)
+  - Commit analysis summary
+  - Duplicate commit IDs table
+  - Complete commit list with timestamps
+- **`results/gnmi_subscribe_*_report.json`**: JSON data (if `--json` flag used)
+
+### File Correlation
+
+Files are correlated by timestamp in their names:
+```
+results/
+├── gnmi_subscribe_20251211_150132.log       # Log file
+└── gnmi_subscribe_20251211_150132_report.md # Corresponding report
+```
 
 ## 🔧 Customization Guide
 
@@ -529,7 +583,9 @@ This project is provided as-is for testing and development purposes.
 
 ## 👤 Author
 
-Created by Eduardo Lopez for gNMI subscription testing and analysis.
+Created by Enrique Lopez Nuñez  for gNMI subscription testing and analysis.
+
+Contact [elopeznu@cisco.com](mailto:elopeznu@cisco.com)
 
 ---
 
